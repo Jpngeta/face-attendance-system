@@ -4,6 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Face Attendance System{% endblock %}</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
@@ -11,10 +18,10 @@
 </head>
 <body>
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <nav class="navbar navbar-expand-lg navbar-dark navbar-custom">
         <div class="container-fluid">
             <a class="navbar-brand" href="{{ url_for('web.index') }}">
-                <i class="bi bi-camera-video"></i> Face Attendance
+                <i class="bi bi-camera-video-fill"></i> Face Attendance
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
@@ -22,40 +29,40 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('web.index') }}">
-                            <i class="bi bi-house"></i> Dashboard
+                        <a class="nav-link {{ 'active' if request.endpoint == 'web.index' }}" href="{{ url_for('web.index') }}">
+                            <i class="bi bi-house-fill"></i> Dashboard
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('web.live_recognition') }}">
+                        <a class="nav-link {{ 'active' if request.endpoint == 'web.live_recognition' }}" href="{{ url_for('web.live_recognition') }}">
                             <i class="bi bi-camera-video-fill"></i> Live Recognition
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('web.students_page') }}">
-                            <i class="bi bi-people"></i> Students
+                        <a class="nav-link {{ 'active' if request.endpoint == 'web.students_page' }}" href="{{ url_for('web.students_page') }}">
+                            <i class="bi bi-people-fill"></i> Students
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('web.sessions_page') }}">
-                            <i class="bi bi-calendar-event"></i> Sessions
+                        <a class="nav-link {{ 'active' if request.endpoint == 'web.sessions_page' }}" href="{{ url_for('web.sessions_page') }}">
+                            <i class="bi bi-calendar-event-fill"></i> Sessions
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('web.attendance_page') }}">
-                            <i class="bi bi-clipboard-check"></i> Attendance
+                        <a class="nav-link {{ 'active' if request.endpoint == 'web.attendance_page' }}" href="{{ url_for('web.attendance_page') }}">
+                            <i class="bi bi-clipboard-check-fill"></i> Attendance
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('web.register_page') }}">
-                            <i class="bi bi-person-plus"></i> Register
+                        <a class="nav-link {{ 'active' if request.endpoint == 'web.register_page' }}" href="{{ url_for('web.register_page') }}">
+                            <i class="bi bi-person-plus-fill"></i> Register
                         </a>
                     </li>
                 </ul>
                 <ul class="navbar-nav">
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('web.settings_page') }}">
-                            <i class="bi bi-gear"></i> Settings
+                        <a class="nav-link {{ 'active' if request.endpoint == 'web.settings_page' }}" href="{{ url_for('web.settings_page') }}">
+                            <i class="bi bi-gear-fill"></i> Settings
                         </a>
                     </li>
                 </ul>
@@ -64,14 +71,14 @@
     </nav>
 
     <!-- Main Content -->
-    <main class="container-fluid py-4">
+    <main class="container-fluid">
         {% block content %}{% endblock %}
     </main>
 
     <!-- Footer -->
-    <footer class="footer mt-auto py-3 bg-light">
+    <footer class="footer">
         <div class="container text-center">
-            <span class="text-muted">Face Attendance System &copy; 2025 | Powered by InsightFace & Raspberry Pi</span>
+            <span>Face Attendance System &copy; 2025 | Powered by InsightFace & Raspberry Pi</span>
         </div>
     </footer>
 
