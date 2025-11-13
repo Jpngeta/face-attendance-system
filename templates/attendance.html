@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Attendance Records{% endblock %}
+{% block content %}
+<h1><i class="bi bi-clipboard-check"></i> Attendance Records</h1>
+<div class="card mt-4">
+    <div class="card-body">
+        {% if records %}
+        <table class="table table-striped">
+            <thead><tr><th>Session</th><th>Student</th><th>Timestamp</th><th>Status</th><th>Confidence</th></tr></thead>
+            <tbody>
+                {% for record in records %}
+                <tr>
+                    <td>{{ record.session.session_name }}</td>
+                    <td>{{ record.student.name }} ({{ record.student.student_id }})</td>
+                    <td>{{ record.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                    <td><span class="badge bg-success">{{ record.status }}</span></td>
+                    <td>{{ "%.2f"|format(record.confidence_score) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p>No attendance records yet</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

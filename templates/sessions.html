@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Sessions - Face Attendance System{% endblock %}
+{% block content %}
+<h1><i class="bi bi-calendar-event"></i> Sessions</h1>
+<div class="card mt-4">
+    <div class="card-body">
+        {% if sessions %}
+        <table class="table table-striped">
+            <thead>
+                <tr><th>Session Name</th><th>Course</th><th>Start Time</th><th>End Time</th><th>Status</th><th>Attendance</th></tr>
+            </thead>
+            <tbody>
+                {% for session in sessions %}
+                <tr>
+                    <td><a href="{{ url_for('web.session_detail', session_id=session.id) }}">{{ session.session_name }}</a></td>
+                    <td>{{ session.course_code or 'N/A' }}</td>
+                    <td>{{ session.start_time.strftime('%Y-%m-%d %H:%M') if session.start_time else 'N/A' }}</td>
+                    <td>{{ session.end_time.strftime('%Y-%m-%d %H:%M') if session.end_time else 'N/A' }}</td>
+                    <td><span class="badge bg-{{ 'warning' if session.status == 'active' else 'success' }}">{{ session.status }}</span></td>
+                    <td>{{ session.attendance_records|length }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p>No sessions yet</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

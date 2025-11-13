@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Students - Face Attendance System{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1><i class="bi bi-people"></i> Students</h1>
+    </div>
+    <div class="col text-end">
+        <a href="{{ url_for('web.register_page') }}" class="btn btn-primary">
+            <i class="bi bi-person-plus"></i> Register New Student
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                {% if students %}
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Student ID</th>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Program</th>
+                                <th>Year</th>
+                                <th>Status</th>
+                                <th>Encodings</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for student in students %}
+                            <tr>
+                                <td>{{ student.student_id }}</td>
+                                <td>{{ student.name }}</td>
+                                <td>{{ student.email or 'N/A' }}</td>
+                                <td>{{ student.program or 'N/A' }}</td>
+                                <td>{{ student.year_of_study or 'N/A' }}</td>
+                                <td>
+                                    <span class="badge bg-{{ 'success' if student.status == 'active' else 'secondary' }}">
+                                        {{ student.status }}
+                                    </span>
+                                </td>
+                                <td>{{ student.face_encodings|length }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted">No students registered yet</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

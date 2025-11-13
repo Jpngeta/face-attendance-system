@@ -1,0 +1,438 @@
+{% extends "base.html" %}
+
+{% block title %}Live Recognition - Face Attendance System{% endblock %}
+
+{% block extra_css %}
+<style>
+    .video-container {
+        position: relative;
+        background: #000;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+
+    .video-stream {
+        width: 100%;
+        height: auto;
+        display: block;
+    }
+
+    .status-badge {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-weight: bold;
+        backdrop-filter: blur(10px);
+    }
+
+    .attendance-card {
+        max-height: 600px;
+        overflow-y: auto;
+    }
+
+    .attendance-item {
+        transition: all 0.3s ease;
+        border-left: 4px solid #28a745;
+    }
+
+    .attendance-item:hover {
+        transform: translateX(5px);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .stats-card {
+        border-left: 4px solid #007bff;
+    }
+
+    .no-session-alert {
+        animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+    }
+
+    .loading-spinner {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2><i class="bi bi-camera-video-fill"></i> Live Face Recognition</h2>
+            <p class="text-muted">Real-time face detection and attendance marking</p>
+        </div>
+    </div>
+
+    <!-- Session Status Alert -->
+    {% if not active_session %}
+    <div class="alert alert-warning no-session-alert" role="alert">
+        <i class="bi bi-exclamation-triangle-fill"></i>
+        <strong>No Active Session!</strong>
+        Attendance will not be marked automatically.
+        <a href="{{ url_for('web.sessions_page') }}" class="alert-link">Create a session</a> to enable attendance tracking.
+    </div>
+    {% else %}
+    <div class="alert alert-success" role="alert">
+        <i class="bi bi-check-circle-fill"></i>
+        <strong>Active Session:</strong> {{ active_session.session_name }}
+        {% if active_session.course_code %}({{ active_session.course_code }}){% endif %}
+    </div>
+    {% endif %}
+
+    <div class="row">
+        <!-- Video Feed Column -->
+        <div class="col-lg-8 mb-4">
+            <div class="card">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-camera-video"></i> Live Camera Feed</h5>
+                    <button class="btn btn-light btn-sm" id="toggleStreamBtn" onclick="toggleStream()">
+                        <i class="bi bi-play-fill" id="streamIcon"></i>
+                        <span id="streamBtnText">Start Stream</span>
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    <div class="video-container">
+                        <div class="loading-spinner" id="loadingSpinner" style="display: none;">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                        <div class="text-center p-5" id="streamPlaceholder">
+                            <i class="bi bi-camera-video" style="font-size: 4rem; color: #ccc;"></i>
+                            <p class="text-muted mt-3">Click "Start Stream" to begin face recognition</p>
+                        </div>
+                        <img src=""
+                             class="video-stream"
+                             alt="Live Video Feed"
+                             id="videoStream"
+                             style="display: none;"
+                             onerror="handleStreamError()">
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <div class="row text-center">
+                        <div class="col-md-4">
+                            <small class="text-muted">FPS</small>
+                            <div id="fps" class="fw-bold">--</div>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted">Registered Faces</small>
+                            <div id="knownFaces" class="fw-bold">--</div>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted">System Status</small>
+                            <div id="systemStatus" class="fw-bold text-success">Active</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Attendance Panel Column -->
+        <div class="col-lg-4">
+            <!-- Session Info Card -->
+            {% if active_session %}
+            <div class="card mb-3 stats-card">
+                <div class="card-header bg-info text-white">
+                    <h6 class="mb-0"><i class="bi bi-info-circle"></i> Session Info</h6>
+                </div>
+                <div class="card-body">
+                    <p class="mb-2"><strong>Session:</strong> {{ active_session.session_name }}</p>
+                    {% if active_session.course_code %}
+                    <p class="mb-2"><strong>Course:</strong> {{ active_session.course_code }} - {{ active_session.course_name }}</p>
+                    {% endif %}
+                    {% if active_session.instructor_name %}
+                    <p class="mb-2"><strong>Instructor:</strong> {{ active_session.instructor_name }}</p>
+                    {% endif %}
+                    <p class="mb-0"><strong>Started:</strong> {{ active_session.start_time.strftime('%I:%M %p') }}</p>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Real-time Attendance Card -->
+            <div class="card">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0"><i class="bi bi-clipboard-check"></i> Recent Attendance</h6>
+                    <button class="btn btn-sm btn-light" onclick="refreshAttendance()">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                </div>
+                <div class="card-body p-0 attendance-card" id="attendanceList">
+                    <div class="text-center p-4 text-muted">
+                        <i class="bi bi-hourglass-split"></i>
+                        <p>Waiting for face detection...</p>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <small class="text-muted">
+                        <i class="bi bi-info-circle"></i>
+                        Updates automatically every 5 seconds
+                    </small>
+                </div>
+            </div>
+
+            <!-- Statistics Card -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-graph-up"></i> Session Statistics</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-6 mb-2">
+                            <div class="h3 text-success mb-0" id="statPresent">0</div>
+                            <small class="text-muted">Present</small>
+                        </div>
+                        <div class="col-6 mb-2">
+                            <div class="h3 text-warning mb-0" id="statLate">0</div>
+                            <small class="text-muted">Late</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Auto-refresh attendance list
+    let refreshInterval;
+    let streamCheckInterval;
+    let lastStreamUpdate = Date.now();
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 10;
+    let isStreamActive = false;
+
+    function refreshAttendance() {
+        {% if active_session %}
+        fetch('/api/attendance?session_id={{ active_session.id }}&limit=10')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.records.length > 0) {
+                    const list = document.getElementById('attendanceList');
+                    list.innerHTML = '';
+
+                    data.records.forEach(record => {
+                        const time = new Date(record.timestamp).toLocaleTimeString();
+                        const item = document.createElement('div');
+                        item.className = 'attendance-item p-3 border-bottom';
+                        item.innerHTML = `
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>${record.student_name}</strong>
+                                    <br>
+                                    <small class="text-muted">
+                                        <i class="bi bi-clock"></i> ${time}
+                                        <span class="badge bg-success ms-2">${record.status}</span>
+                                    </small>
+                                </div>
+                                <div class="text-end">
+                                    <small class="text-muted">Confidence</small>
+                                    <br>
+                                    <span class="badge bg-info">${(record.confidence_score * 100).toFixed(1)}%</span>
+                                </div>
+                            </div>
+                        `;
+                        list.appendChild(item);
+                    });
+                }
+            })
+            .catch(error => console.error('Error fetching attendance:', error));
+
+        // Update statistics
+        fetch('/api/attendance/stats?session_id={{ active_session.id }}')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('statPresent').textContent = data.stats.present || 0;
+                    document.getElementById('statLate').textContent = data.stats.late || 0;
+                }
+            })
+            .catch(error => console.error('Error fetching stats:', error));
+        {% endif %}
+    }
+
+    function updateRecognitionStatus() {
+        fetch('/api/recognition/status')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('knownFaces').textContent = data.status.known_faces;
+                    if (isStreamActive) {
+                        document.getElementById('systemStatus').textContent = 'Active';
+                        document.getElementById('systemStatus').className = 'fw-bold text-success';
+                    } else {
+                        document.getElementById('systemStatus').textContent = 'Stopped';
+                        document.getElementById('systemStatus').className = 'fw-bold text-secondary';
+                    }
+                }
+            })
+            .catch(error => console.error('Error fetching status:', error));
+    }
+
+    function toggleStream() {
+        const videoStream = document.getElementById('videoStream');
+        const placeholder = document.getElementById('streamPlaceholder');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const toggleBtn = document.getElementById('toggleStreamBtn');
+        const streamIcon = document.getElementById('streamIcon');
+        const streamBtnText = document.getElementById('streamBtnText');
+
+        if (!isStreamActive) {
+            // Start stream
+            console.log('Starting stream...');
+            placeholder.style.display = 'none';
+            loadingSpinner.style.display = 'block';
+
+            // Set video source with timestamp to prevent caching
+            videoStream.src = '{{ url_for("api.video_stream") }}?' + new Date().getTime();
+            videoStream.style.display = 'block';
+
+            // Update button
+            streamIcon.className = 'bi bi-stop-fill';
+            streamBtnText.textContent = 'Stop Stream';
+            toggleBtn.className = 'btn btn-danger btn-sm';
+
+            isStreamActive = true;
+            reconnectAttempts = 0;
+            lastStreamUpdate = Date.now();
+
+            // Start monitoring intervals
+            if (refreshInterval) clearInterval(refreshInterval);
+            if (streamCheckInterval) clearInterval(streamCheckInterval);
+
+            refreshInterval = setInterval(() => {
+                refreshAttendance();
+                updateRecognitionStatus();
+                updateStreamHealth();
+            }, 5000);
+
+            streamCheckInterval = setInterval(checkStreamHealth, 10000);
+
+            // Update status
+            document.getElementById('systemStatus').textContent = 'Starting...';
+            document.getElementById('systemStatus').className = 'fw-bold text-warning';
+
+        } else {
+            // Stop stream
+            console.log('Stopping stream...');
+            videoStream.src = '';
+            videoStream.style.display = 'none';
+            loadingSpinner.style.display = 'none';
+            placeholder.style.display = 'block';
+
+            // Update button
+            streamIcon.className = 'bi bi-play-fill';
+            streamBtnText.textContent = 'Start Stream';
+            toggleBtn.className = 'btn btn-light btn-sm';
+
+            isStreamActive = false;
+
+            // Stop monitoring intervals
+            if (refreshInterval) clearInterval(refreshInterval);
+            if (streamCheckInterval) clearInterval(streamCheckInterval);
+
+            // Update status
+            document.getElementById('systemStatus').textContent = 'Stopped';
+            document.getElementById('systemStatus').className = 'fw-bold text-secondary';
+        }
+    }
+
+    function reconnectStream() {
+        if (reconnectAttempts >= maxReconnectAttempts) {
+            console.error('Max reconnection attempts reached');
+            document.getElementById('systemStatus').textContent = 'Failed';
+            document.getElementById('systemStatus').className = 'fw-bold text-danger';
+            return;
+        }
+
+        reconnectAttempts++;
+        console.log(`Reconnecting stream (attempt ${reconnectAttempts}/${maxReconnectAttempts})...`);
+
+        document.getElementById('systemStatus').textContent = 'Reconnecting...';
+        document.getElementById('systemStatus').className = 'fw-bold text-warning';
+
+        // Add timestamp to prevent caching
+        const videoStream = document.getElementById('videoStream');
+        videoStream.src = '{{ url_for("api.video_stream") }}?' + new Date().getTime();
+    }
+
+    function handleStreamError() {
+        console.error('Stream error occurred');
+        document.getElementById('systemStatus').textContent = 'Error';
+        document.getElementById('systemStatus').className = 'fw-bold text-danger';
+
+        // Try to reconnect after 3 seconds
+        setTimeout(reconnectStream, 3000);
+    }
+
+    function checkStreamHealth() {
+        // Check if stream has been updating (this is a simple timeout check)
+        const timeSinceLastUpdate = Date.now() - lastStreamUpdate;
+
+        // If no update for more than 10 seconds, consider stream frozen
+        if (timeSinceLastUpdate > 10000) {
+            console.warn('Stream appears frozen, attempting reconnection');
+            reconnectStream();
+            lastStreamUpdate = Date.now(); // Reset timer
+        }
+    }
+
+    // Hide loading spinner when stream loads
+    document.getElementById('videoStream').addEventListener('load', function() {
+        if (isStreamActive) {
+            document.getElementById('loadingSpinner').style.display = 'none';
+            document.getElementById('systemStatus').textContent = 'Active';
+            document.getElementById('systemStatus').className = 'fw-bold text-success';
+            reconnectAttempts = 0; // Reset reconnection attempts on success
+            lastStreamUpdate = Date.now();
+            console.log('Stream loaded successfully');
+        }
+    });
+
+    // Update last stream update time periodically
+    // This is a workaround since img load event only fires once
+    // We'll use the recognition status as a proxy for stream health
+    function updateStreamHealth() {
+        fetch('/api/recognition/status')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.status.service_initialized) {
+                    lastStreamUpdate = Date.now();
+                }
+            })
+            .catch(error => console.error('Error checking stream health:', error));
+    }
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initial status check
+        updateRecognitionStatus();
+
+        // Don't start stream automatically - wait for user to click button
+        console.log('Page loaded. Click "Start Stream" to begin recognition.');
+    });
+
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', function() {
+        if (refreshInterval) {
+            clearInterval(refreshInterval);
+        }
+        if (streamCheckInterval) {
+            clearInterval(streamCheckInterval);
+        }
+    });
+</script>
+{% endblock %}
