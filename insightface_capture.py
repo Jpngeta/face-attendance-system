@@ -5,7 +5,7 @@ from picamera2 import Picamera2
 import time
 
 # Change this to the person's name
-PERSON_NAME = "elvin"
+PERSON_NAME = "ritchie"
 
 def create_folder(name):
     dataset_folder = "insightface_dataset"

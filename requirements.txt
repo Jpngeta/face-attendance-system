@@ -1,0 +1,31 @@
+# Core Face Recognition
+insightface>=0.7.3
+opencv-python>=4.8.0
+numpy>=1.24.0
+onnxruntime>=1.16.0
+
+# Raspberry Pi Camera
+picamera2>=0.3.12
+
+# Web Framework
+flask>=3.0.0
+flask-cors>=4.0.0
+flask-sqlalchemy>=3.1.1
+
+# Database
+sqlalchemy>=2.0.23
+
+# Google Sheets Integration
+google-auth>=2.23.0
+google-auth-oauthlib>=1.1.0
+google-api-python-client>=2.100.0
+gspread>=5.11.0
+
+# Utilities
+python-dotenv>=1.0.0
+requests>=2.31.0
+pillow>=10.0.0
+
+# Development
+pytest>=7.4.0
+black>=23.9.0
