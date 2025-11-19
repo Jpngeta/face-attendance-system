@@ -80,7 +80,7 @@
         <i class="bi bi-exclamation-triangle-fill"></i>
         <strong>No Active Session!</strong>
         Attendance will not be marked automatically.
-        <a href="{{ url_for('web.sessions_page') }}" class="alert-link">Create a session</a> to enable attendance tracking.
+        <a href="{{ url_for('web.index') }}?openModal=newSession" class="alert-link">Create a session</a> to enable attendance tracking.
     </div>
     {% else %}
     <div class="alert alert-success" role="alert">
