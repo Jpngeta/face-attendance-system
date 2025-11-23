@@ -18,7 +18,7 @@
                 <tr>
                     <td>{{ record.student.student_id }}</td>
                     <td>{{ record.student.name }}</td>
-                    <td>{{ record.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                    <td>{{ record.timestamp | local_time }}</td>
                     <td><span class="badge bg-success">{{ record.status }}</span></td>
                     <td>{{ "%.2f"|format(record.confidence_score) }}</td>
                 </tr>

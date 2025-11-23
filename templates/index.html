@@ -62,7 +62,7 @@
                         <p><strong>Location:</strong> {{ active_session.location or 'N/A' }}</p>
                     </div>
                     <div class="col-md-6">
-                        <p><strong>Started:</strong> {{ active_session.start_time.strftime('%Y-%m-%d %H:%M:%S') if active_session.start_time else 'N/A' }}</p>
+                        <p><strong>Started:</strong> {{ active_session.start_time | local_time('%I:%M %p') if active_session.start_time else 'N/A' }}</p>
                         <p><strong>Attendance Count:</strong> {{ active_session.attendance_records|length }}</p>
                     </div>
                 </div>
