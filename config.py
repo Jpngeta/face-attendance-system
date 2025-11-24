@@ -2,6 +2,7 @@
 Configuration management for Face Attendance System
 """
 import os
+import pytz
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -48,6 +49,9 @@ class Config:
     AUTO_MARK_ATTENDANCE = os.getenv('AUTO_MARK_ATTENDANCE', 'true').lower() == 'true'
     ATTENDANCE_COOLDOWN_MINUTES = int(os.getenv('ATTENDANCE_COOLDOWN_MINUTES', 5))
     SESSION_TIMEOUT_MINUTES = int(os.getenv('SESSION_TIMEOUT_MINUTES', 60))
+
+    # Timezone Configuration
+    TIMEZONE = os.getenv('TIMEZONE', 'Africa/Nairobi')  # Default to Nairobi
 
     # Google Sheets Configuration
     GOOGLE_SHEETS_ENABLED = os.getenv('GOOGLE_SHEETS_ENABLED', 'false').lower() == 'true'
