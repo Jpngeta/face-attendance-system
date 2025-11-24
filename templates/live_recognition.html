@@ -216,22 +216,39 @@
     let isStreamActive = false;
 
     function refreshAttendance() {
-        {% if active_session %}
-        fetch('/api/attendance?session_id={{ active_session.id }}&limit=10')
-            .then(response => response.json())
-            .then(data => {
-                if (data.success && data.records.length > 0) {
-                    const list = document.getElementById('attendanceList');
-                    list.innerHTML = '';
+    // Safely handle the Jinja variable. If no session, this string is empty.
+    const sessionId = "{{ active_session.id if active_session else '' }}";
 
+    // If no active session, do not attempt to fetch
+    if (!sessionId) return;
+
+    fetch(`/api/attendance?session_id=${sessionId}&limit=10`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const list = document.getElementById('attendanceList');
+                
+                // FIX 1: Clear the list regardless of whether records exist
+                list.innerHTML = '';
+
+                if (data.records.length === 0) {
+                    // Handle empty state explicitly
+                    list.innerHTML = `
+                        <div class="text-center p-4 text-muted">
+                            <i class="bi bi-hourglass-split"></i>
+                            <p>Waiting for face detection...</p>
+                        </div>`;
+                } else {
                     data.records.forEach(record => {
                         const time = new Date(record.timestamp).toLocaleTimeString();
                         const item = document.createElement('div');
                         item.className = 'attendance-item p-3 border-bottom';
+                        
+                        // Build HTML structure but insert Name as textContent to prevent XSS
                         item.innerHTML = `
                             <div class="d-flex justify-content-between align-items-center">
                                 <div>
-                                    <strong>${record.student_name}</strong>
+                                    <strong class="student-name-text"></strong>
                                     <br>
                                     <small class="text-muted">
                                         <i class="bi bi-clock"></i> ${time}
@@ -245,23 +262,29 @@
                                 </div>
                             </div>
                         `;
+                        
+                        // Safely inject text
+                        item.querySelector('.student-name-text').textContent = record.student_name;
                         list.appendChild(item);
                     });
                 }
-            })
-            .catch(error => console.error('Error fetching attendance:', error));
+            }
+        })
+        .catch(error => console.error('Error fetching attendance:', error));
 
-        // Update statistics
-        fetch('/api/attendance/stats?session_id={{ active_session.id }}')
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    document.getElementById('statPresent').textContent = data.stats.present || 0;
-                    document.getElementById('statLate').textContent = data.stats.late || 0;
-                }
-            })
-            .catch(error => console.error('Error fetching stats:', error));
-        {% endif %}
+    // Update statistics
+    fetch(`/api/attendance/stats?session_id=${sessionId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.stats) {
+                const presentEl = document.getElementById('statPresent');
+                const lateEl = document.getElementById('statLate');
+                // Check elements exist before updating to prevent errors
+                if (presentEl) presentEl.textContent = data.stats.present || 0;
+                if (lateEl) lateEl.textContent = data.stats.late || 0;
+            }
+        })
+        .catch(error => console.error('Error fetching stats:', error));
     }
 
     function updateRecognitionStatus() {
@@ -328,7 +351,33 @@
         } else {
             // Stop stream
             console.log('Stopping stream...');
-            videoStream.src = '';
+
+            // FIRST: Call backend to stop the stream (BEFORE clearing the source)
+            fetch('/api/recognition/stop', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'}
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    console.log('Backend stream stopped successfully');
+                } else {
+                    console.error('Failed to stop backend stream:', data.error);
+                }
+                // Wait a moment for backend to process, then clear the source
+                setTimeout(() => {
+                    // Clear video source to close connection
+                    videoStream.src = '';
+                    console.log('Video source cleared');
+                }, 100);
+            })
+            .catch(error => {
+                console.error('Error stopping backend stream:', error);
+                // Still clear the source even if the API call failed
+                videoStream.src = '';
+            });
+
+            // Immediately update UI
             videoStream.style.display = 'none';
             loadingSpinner.style.display = 'none';
             placeholder.style.display = 'block';
@@ -345,8 +394,14 @@
             if (streamCheckInterval) clearInterval(streamCheckInterval);
 
             // Update status
-            document.getElementById('systemStatus').textContent = 'Stopped';
-            document.getElementById('systemStatus').className = 'fw-bold text-secondary';
+            document.getElementById('systemStatus').textContent = 'Stopping...';
+            document.getElementById('systemStatus').className = 'fw-bold text-warning';
+
+            // Update status to stopped after a moment
+            setTimeout(() => {
+                document.getElementById('systemStatus').textContent = 'Stopped';
+                document.getElementById('systemStatus').className = 'fw-bold text-secondary';
+            }, 500);
         }
     }
 
@@ -432,6 +487,12 @@
         }
         if (streamCheckInterval) {
             clearInterval(streamCheckInterval);
+        }
+        // Stop backend stream if active
+        if (isStreamActive) {
+            // Use sendBeacon for reliable delivery during page unload
+            const data = JSON.stringify({});
+            navigator.sendBeacon('/api/recognition/stop', data);
         }
     });
 </script>
