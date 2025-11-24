@@ -1,62 +1,416 @@
 {% extends "base.html" %}
 {% block title %}Register Student{% endblock %}
 {% block content %}
-<h1><i class="bi bi-person-plus"></i> Register New Student</h1>
-<div class="card mt-4">
-    <div class="card-body">
-        <form id="registerForm">
-            <div class="mb-3">
-                <label class="form-label">Student ID *</label>
-                <input type="text" class="form-control" id="studentId" required>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Name *</label>
-                <input type="text" class="form-control" id="studentName" required>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Email</label>
-                <input type="email" class="form-control" id="email">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Phone</label>
-                <input type="tel" class="form-control" id="phone">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Program</label>
-                <input type="text" class="form-control" id="program">
-            </div>
-            <button type="submit" class="btn btn-primary">Register</button>
-        </form>
-        <div id="message" class="mt-3"></div>
+<div class="row mb-4">
+    <div class="col">
+        <h1><i class="bi bi-person-plus"></i> Register New Student</h1>
     </div>
 </div>
+
+<div class="row">
+    <!-- Student Information Form -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Step 1: Student Information</h5>
+            </div>
+            <div class="card-body">
+                <form id="studentInfoForm">
+                    <div class="mb-3">
+                        <label class="form-label">Student ID *</label>
+                        <input type="text" class="form-control" id="studentId" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Name *</label>
+                        <input type="text" class="form-control" id="studentName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" id="email">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Phone</label>
+                        <input type="tel" class="form-control" id="phone">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Program</label>
+                        <input type="text" class="form-control" id="program" placeholder="e.g., Computer Science">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Year of Study</label>
+                        <input type="number" class="form-control" id="yearOfStudy" min="1" max="6" placeholder="1-6">
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="createStudentBtn">
+                        <i class="bi bi-arrow-right"></i> Continue to Photo Capture
+                    </button>
+                </form>
+                <div id="infoMessage" class="mt-3"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Photo Capture Section -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Step 2: Face Photo Capture</h5>
+            </div>
+            <div class="card-body" id="captureSection" style="display: none;">
+                <!-- Live Camera Preview -->
+                <div class="mb-3 text-center">
+                    <div class="position-relative" style="max-width: 100%;">
+                        <img id="cameraPreview"
+                             src=""
+                             alt="Camera Preview"
+                             class="img-fluid rounded border"
+                             style="width: 100%; height: auto; display: block; background: #000;">
+                    </div>
+                </div>
+
+                <!-- Capture Instructions -->
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>Instructions:</strong>
+                    <ul class="mb-0 mt-2">
+                        <li>Position your face clearly in the frame</li>
+                        <li>Capture at least 3 photos from different angles</li>
+                        <li>Look straight, left, and right for best results</li>
+                        <li>Green box = Good quality, Red box = Poor quality</li>
+                    </ul>
+                </div>
+
+                <!-- Capture Controls -->
+                <div class="text-center mb-3">
+                    <button class="btn btn-success btn-lg" id="captureBtn">
+                        <i class="bi bi-camera"></i> Capture Photo
+                    </button>
+                </div>
+
+                <!-- Captured Photos Preview -->
+                <div class="mb-3">
+                    <h6>Captured Photos (<span id="photoCount">0</span>/5)</h6>
+                    <div class="progress mb-2" style="height: 25px;">
+                        <div id="photoProgress" class="progress-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="5">
+                            0/5
+                        </div>
+                    </div>
+                    <div id="capturedPhotos" class="d-flex flex-wrap gap-2">
+                        <!-- Thumbnails will be added here -->
+                    </div>
+                </div>
+
+                <!-- Complete Enrollment Button -->
+                <div class="text-center">
+                    <button class="btn btn-primary" id="completeBtn" disabled>
+                        <i class="bi bi-check-circle"></i> Complete Enrollment
+                    </button>
+                    <button class="btn btn-secondary ms-2" id="cancelBtn">
+                        <i class="bi bi-x-circle"></i> Cancel
+                    </button>
+                </div>
+
+                <div id="captureMessage" class="mt-3"></div>
+            </div>
+
+            <!-- Waiting State -->
+            <div class="card-body text-center text-muted" id="waitingSection">
+                <i class="bi bi-arrow-left" style="font-size: 3rem;"></i>
+                <p class="mt-3">Complete student information first</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Success Modal -->
+<div class="modal fade" id="successModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="bi bi-check-circle"></i> Enrollment Complete
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Student has been successfully enrolled!</p>
+                <p><strong id="enrolledStudentName"></strong> is now registered in the system.</p>
+            </div>
+            <div class="modal-footer">
+                <a href="{{ url_for('web.students_page') }}" class="btn btn-primary">View All Students</a>
+                <button type="button" class="btn btn-secondary" id="enrollAnotherBtn">Enroll Another Student</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
+
 {% block extra_js %}
 <script>
-document.getElementById('registerForm').onsubmit = function(e) {
+let currentStudentId = null;
+let currentStudentData = null;  // Store student data temporarily until first photo
+let photosCaptured = 0;
+let maxPhotos = 5;
+let minPhotos = 3;
+let previewStream = null;
+
+// Student Information Form Submission
+document.getElementById('studentInfoForm').onsubmit = async function(e) {
     e.preventDefault();
+
     const data = {
         student_id: document.getElementById('studentId').value,
         name: document.getElementById('studentName').value,
         email: document.getElementById('email').value,
         phone: document.getElementById('phone').value,
-        program: document.getElementById('program').value
+        program: document.getElementById('program').value,
+        year_of_study: parseInt(document.getElementById('yearOfStudy').value) || null
     };
-    fetch('/api/students', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    })
-    .then(r => r.json())
-    .then(result => {
-        const msg = document.getElementById('message');
+
+    try {
+        const response = await fetch('/api/enrollment/start', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+
         if (result.success) {
-            msg.innerHTML = '<div class="alert alert-success">Student registered! Now capture face images using insightface_capture.py</div>';
-            document.getElementById('registerForm').reset();
+            // Store student data temporarily (not saved to DB yet)
+            currentStudentId = data.student_id;
+            currentStudentData = data;
+
+            // Show success message
+            showMessage('infoMessage', 'Validation passed! Now capture at least 3 face photos to complete enrollment.', 'success');
+
+            // Disable form
+            document.getElementById('studentInfoForm').querySelectorAll('input').forEach(input => {
+                input.disabled = true;
+            });
+            document.getElementById('createStudentBtn').disabled = true;
+
+            // Show capture section
+            document.getElementById('waitingSection').style.display = 'none';
+            document.getElementById('captureSection').style.display = 'block';
+
+            // Start camera preview
+            startCameraPreview();
         } else {
-            msg.innerHTML = '<div class="alert alert-danger">Error: ' + result.error + '</div>';
+            showMessage('infoMessage', 'Error: ' + result.error, 'danger');
         }
-    });
+    } catch (error) {
+        showMessage('infoMessage', 'Error: ' + error.message, 'danger');
+    }
 };
+
+// Start Camera Preview
+function startCameraPreview() {
+    const preview = document.getElementById('cameraPreview');
+
+    // Add timestamp to prevent caching and start stream
+    preview.src = '/api/enrollment/preview?' + new Date().getTime();
+
+    console.log('Enrollment preview started');
+}
+
+// Capture Photo Button
+document.getElementById('captureBtn').onclick = async function() {
+    if (photosCaptured >= maxPhotos) {
+        showMessage('captureMessage', 'Maximum photos captured!', 'warning');
+        return;
+    }
+
+    const btn = this;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Capturing...';
+
+    try {
+        // Include student data with the capture request
+        // This will create the student on first photo capture
+        const captureData = {
+            student_id: currentStudentId,
+            ...currentStudentData  // Include all student data
+        };
+
+        const response = await fetch('/api/enrollment/capture', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(captureData)
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            photosCaptured++;
+            updatePhotoProgress();
+
+            // Add thumbnail
+            addPhotoThumbnail(photosCaptured, result.quality_score);
+
+            // Show success message
+            const qualityText = result.quality_score > 0.7 ? 'Good' : result.quality_score > 0.5 ? 'OK' : 'Poor';
+            showMessage('captureMessage',
+                `Photo ${photosCaptured} captured! Quality: ${qualityText} (${result.quality_score.toFixed(2)})`,
+                'success');
+
+            // Enable complete button if minimum photos captured
+            if (photosCaptured >= minPhotos) {
+                document.getElementById('completeBtn').disabled = false;
+            }
+
+            // Auto-disable capture if max reached
+            if (photosCaptured >= maxPhotos) {
+                btn.innerHTML = '<i class="bi bi-camera"></i> Maximum Photos Captured';
+                showMessage('captureMessage', 'Maximum photos captured! Click "Complete Enrollment" to finish.', 'info');
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-camera"></i> Capture Photo';
+            }
+        } else {
+            showMessage('captureMessage', 'Error: ' + result.error, 'danger');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-camera"></i> Capture Photo';
+        }
+    } catch (error) {
+        showMessage('captureMessage', 'Error: ' + error.message, 'danger');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-camera"></i> Capture Photo';
+    }
+};
+
+// Complete Enrollment Button
+document.getElementById('completeBtn').onclick = async function() {
+    if (photosCaptured < minPhotos) {
+        showMessage('captureMessage', `Please capture at least ${minPhotos} photos before completing enrollment.`, 'warning');
+        return;
+    }
+
+    const btn = this;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processing...';
+
+    try {
+        const response = await fetch('/api/enrollment/complete', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ student_id: currentStudentId })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            // Stop the enrollment preview stream
+            stopEnrollmentStream();
+
+            // Show success modal
+            document.getElementById('enrolledStudentName').textContent = result.student.name;
+            const modal = new bootstrap.Modal(document.getElementById('successModal'));
+            modal.show();
+        } else {
+            showMessage('captureMessage', 'Error: ' + result.error, 'danger');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-check-circle"></i> Complete Enrollment';
+        }
+    } catch (error) {
+        showMessage('captureMessage', 'Error: ' + error.message, 'danger');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-check-circle"></i> Complete Enrollment';
+    }
+};
+
+// Cancel Button
+document.getElementById('cancelBtn').onclick = function() {
+    if (confirm('Are you sure you want to cancel? Captured photos will be kept.')) {
+        // Stop the enrollment preview stream
+        stopEnrollmentStream();
+        window.location.href = '{{ url_for("web.students_page") }}';
+    }
+};
+
+// Enroll Another Student Button
+document.getElementById('enrollAnotherBtn').onclick = function() {
+    window.location.reload();
+};
+
+// Update Photo Progress
+function updatePhotoProgress() {
+    const percentage = (photosCaptured / maxPhotos) * 100;
+    const progressBar = document.getElementById('photoProgress');
+    progressBar.style.width = percentage + '%';
+    progressBar.setAttribute('aria-valuenow', photosCaptured);
+    progressBar.textContent = `${photosCaptured}/${maxPhotos}`;
+    document.getElementById('photoCount').textContent = photosCaptured;
+
+    // Color code based on progress
+    if (photosCaptured >= minPhotos) {
+        progressBar.classList.remove('bg-warning');
+        progressBar.classList.add('bg-success');
+    } else {
+        progressBar.classList.add('bg-warning');
+    }
+}
+
+// Add Photo Thumbnail
+function addPhotoThumbnail(number, quality) {
+    const container = document.getElementById('capturedPhotos');
+    const thumbnail = document.createElement('div');
+
+    const qualityColor = quality > 0.7 ? 'success' : quality > 0.5 ? 'warning' : 'danger';
+    const qualityText = quality > 0.7 ? 'Good' : quality > 0.5 ? 'OK' : 'Poor';
+
+    thumbnail.className = `border border-${qualityColor} rounded p-2 text-center`;
+    thumbnail.style.width = '80px';
+    thumbnail.innerHTML = `
+        <i class="bi bi-image text-${qualityColor}" style="font-size: 2rem;"></i>
+        <div class="small">Photo ${number}</div>
+        <div class="small text-${qualityColor}">${qualityText}</div>
+    `;
+
+    container.appendChild(thumbnail);
+}
+
+// Helper function to show messages
+function showMessage(elementId, message, type) {
+    const msgDiv = document.getElementById(elementId);
+    msgDiv.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+
+    // Auto-hide success messages after 5 seconds
+    if (type === 'success') {
+        setTimeout(() => {
+            msgDiv.innerHTML = '';
+        }, 5000);
+    }
+}
+
+// Helper function to stop enrollment stream
+function stopEnrollmentStream() {
+    fetch('/api/enrollment/stop', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log('Enrollment preview stream stopped');
+        } else {
+            console.error('Failed to stop enrollment stream:', data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error stopping enrollment stream:', error);
+    });
+}
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', function() {
+    // Stop enrollment stream if it's running
+    const captureSection = document.getElementById('captureSection');
+    if (captureSection && captureSection.style.display !== 'none') {
+        // Use sendBeacon for reliable delivery during page unload
+        const data = JSON.stringify({});
+        navigator.sendBeacon('/api/enrollment/stop', data);
+    }
+});
 </script>
 {% endblock %}
