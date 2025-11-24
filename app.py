@@ -53,6 +53,23 @@ def create_app(config_name=None):
         if request.path.startswith('/api/'):
             return jsonify({'error': 'Internal server error'}), 500
         return render_template('500.html'), 500
+    
+    # Register template filters
+    from utils import convert_utc_to_local
+    
+    @app.template_filter('local_time')
+    def local_time_filter(dt, format='%Y-%m-%d %H:%M:%S'):
+        """
+        Template filter to convert UTC datetime to local timezone
+        
+        Usage in templates:
+            {{ record.timestamp | local_time }}
+            {{ record.timestamp | local_time('%I:%M %p') }}
+        """
+        local_dt = convert_utc_to_local(dt)
+        if local_dt is None:
+            return 'N/A'
+        return local_dt.strftime(format)
 
     # Context processors
     @app.context_processor
