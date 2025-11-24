@@ -16,6 +16,7 @@ from typing import Optional, Tuple, List
 from config import Config
 from database import DatabaseManager
 from flask import Flask
+import threading
 
 class FaceRecognitionService:
     """Face recognition service with real-time detection and database integration"""
@@ -71,6 +72,11 @@ class FaceRecognitionService:
         # Camera started flag
         self.camera_started = False
 
+        # Streaming control flags (thread-safe)
+        self._streaming_lock = threading.Lock()
+        self._recognition_streaming = False
+        self._enrollment_streaming = False
+
     def load_encodings_from_db(self):
         """Load face encodings from database"""
         print("[INFO] Loading face encodings from database...")
@@ -102,6 +108,40 @@ class FaceRecognitionService:
             self.picam2.stop()
             self.camera_started = False
             print("[INFO] Camera stopped")
+
+    def start_recognition_stream(self):
+        """Signal that recognition streaming should start"""
+        with self._streaming_lock:
+            self._recognition_streaming = True
+            print("[INFO] Recognition streaming flag set to True")
+
+    def stop_recognition_stream(self):
+        """Signal that recognition streaming should stop"""
+        with self._streaming_lock:
+            self._recognition_streaming = False
+            print("[INFO] Recognition streaming flag set to False")
+
+    def is_recognition_streaming(self):
+        """Check if recognition streaming is active"""
+        with self._streaming_lock:
+            return self._recognition_streaming
+
+    def start_enrollment_stream(self):
+        """Signal that enrollment streaming should start"""
+        with self._streaming_lock:
+            self._enrollment_streaming = True
+            print("[INFO] Enrollment streaming flag set to True")
+
+    def stop_enrollment_stream(self):
+        """Signal that enrollment streaming should stop"""
+        with self._streaming_lock:
+            self._enrollment_streaming = False
+            print("[INFO] Enrollment streaming flag set to False")
+
+    def is_enrollment_streaming(self):
+        """Check if enrollment streaming is active"""
+        with self._streaming_lock:
+            return self._enrollment_streaming
 
     def recognize_face(self, embedding: np.ndarray) -> Tuple[str, float, Optional[int]]:
         """
@@ -233,6 +273,7 @@ class FaceRecognitionService:
             auto_mark_attendance: Whether to automatically mark attendance
         """
         self.start_camera()
+        self.start_recognition_stream()
 
         # Track recent detections to prevent spam
         recent_detections = {}
@@ -241,8 +282,13 @@ class FaceRecognitionService:
         consecutive_errors = 0
         max_consecutive_errors = 5
 
-        while True:
+        while self.is_recognition_streaming():
             try:
+                # Check flag at the start of each iteration
+                if not self.is_recognition_streaming():
+                    print("[INFO] Stream stop requested, breaking loop")
+                    break
+
                 # Capture frame with timeout protection
                 frame = self.capture_frame()
 
@@ -255,7 +301,7 @@ class FaceRecognitionService:
                 annotated_frame, detections = self.process_frame(frame)
 
                 # Auto-mark attendance if enabled and session is active
-                if auto_mark_attendance and session_id:
+                if auto_mark_attendance and session_id and len(detections) > 0:
                     print(f"[DEBUG] Auto-mark enabled, session_id={session_id}, detections={len(detections)}")
                     for detection in detections:
                         print(f"[DEBUG] Detection: name={detection['name']}, db_id={detection['student_db_id']}, distance={detection['distance']:.3f}")
@@ -315,9 +361,19 @@ class FaceRecognitionService:
                 # Reset error counter on success
                 consecutive_errors = 0
 
+                # Check flag before yielding
+                if not self.is_recognition_streaming():
+                    print("[INFO] Stream stop requested before yield, breaking")
+                    break
+
                 # Yield frame in multipart format
                 yield (b'--frame\r\n'
                        b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
+                # Check flag after yield (in case it was set while we were blocked)
+                if not self.is_recognition_streaming():
+                    print("[INFO] Stream stop requested after yield, breaking")
+                    break
 
                 # Small delay to prevent overwhelming the client
                 time.sleep(0.033)  # ~30 FPS
@@ -325,18 +381,21 @@ class FaceRecognitionService:
             except GeneratorExit:
                 # Client disconnected
                 print("[INFO] Client disconnected from stream")
+                self.stop_recognition_stream()
                 break
             except Exception as e:
                 print(f"[ERROR] Frame generation error: {e}")
                 consecutive_errors += 1
                 if consecutive_errors >= max_consecutive_errors:
                     print("[ERROR] Too many consecutive errors, stopping stream")
+                    self.stop_recognition_stream()
                     break
                 time.sleep(0.1)  # Brief pause before retry
                 continue
 
         # Cleanup on exit
-        print("[INFO] Stream ended, cleaning up...")
+        print("[INFO] Recognition stream ended, cleaning up...")
+        self.stop_recognition_stream()
         self.stop_camera()
 
     def run_recognition_loop(self, session_id: Optional[int] = None,
@@ -444,6 +503,194 @@ class FaceRecognitionService:
         except Exception as e:
             print(f"[ERROR] Failed to capture photo: {e}")
             return False, None
+
+    def capture_enrollment_photo_with_quality(self, person_name: str,
+                                              save_path: str) -> Tuple[bool, Optional[np.ndarray], float]:
+        """
+        Capture photo for enrollment with quality assessment
+
+        Args:
+            person_name: Name of the person
+            save_path: Path to save the image
+
+        Returns:
+            Tuple of (success, embedding, quality_score)
+        """
+        self.start_camera()
+
+        try:
+            # Capture frame
+            frame = self.capture_frame()
+
+            if frame is None:
+                print("[ERROR] Failed to capture frame")
+                return False, None, 0.0
+
+            # Detect faces
+            faces = self.app.get(frame)
+
+            if len(faces) == 0:
+                print("[WARNING] No face detected")
+                return False, None, 0.0
+
+            if len(faces) > 1:
+                print("[WARNING] Multiple faces detected, using largest face")
+                # Use the largest face (by bounding box area)
+                faces = sorted(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]), reverse=True)
+
+            # Use first/largest detected face
+            face = faces[0]
+            embedding = face.embedding
+
+            # Calculate quality score based on detection score and face size
+            bbox = face.bbox.astype(int)
+            x1, y1, x2, y2 = bbox
+            face_area = (x2 - x1) * (y2 - y1)
+            frame_area = frame.shape[0] * frame.shape[1]
+            size_ratio = face_area / frame_area
+
+            # Quality score: combination of detection score and size
+            # Good if face is between 5% and 40% of frame
+            size_quality = min(1.0, max(0.0, (size_ratio - 0.05) / 0.35))
+            detection_score = float(face.det_score) if hasattr(face, 'det_score') else 0.9
+            quality_score = (size_quality * 0.5 + detection_score * 0.5)
+
+            # Draw bounding box with quality indicator
+            color = (0, 255, 0) if quality_score > 0.7 else (0, 165, 255) if quality_score > 0.5 else (0, 0, 255)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+
+            # Draw label with quality
+            label = f"{person_name} (Q: {quality_score:.2f})"
+            cv2.rectangle(frame, (x1, y1 - 35), (x2, y1), color, cv2.FILLED)
+            cv2.putText(frame, label, (x1 + 6, y1 - 6),
+                       cv2.FONT_HERSHEY_DUPLEX, 0.6, (255, 255, 255), 1)
+
+            # Save image
+            cv2.imwrite(save_path, frame)
+            print(f"[INFO] Photo saved: {save_path} (Quality: {quality_score:.2f})")
+
+            return True, embedding, quality_score
+
+        except Exception as e:
+            print(f"[ERROR] Failed to capture photo: {e}")
+            import traceback
+            traceback.print_exc()
+            return False, None, 0.0
+
+    def generate_enrollment_preview(self):
+        """
+        Generator function for enrollment preview streaming
+        Shows live camera feed with face detection for enrollment purposes
+        Yields JPEG frames for Flask streaming response
+        """
+        self.start_camera()
+        self.start_enrollment_stream()
+        print("[INFO] Starting enrollment preview stream...")
+
+        # Error recovery tracking
+        consecutive_errors = 0
+        max_consecutive_errors = 5
+
+        try:
+            while self.is_enrollment_streaming():
+                try:
+                    # Capture frame
+                    frame = self.capture_frame()
+
+                    if frame is None or frame.size == 0:
+                        print("[WARNING] Empty frame captured, skipping...")
+                        time.sleep(0.1)
+                        continue
+
+                    # Detect faces
+                    faces = self.app.get(frame)
+
+                    # Process detected faces with quality overlay
+                    for face in faces:
+                        bbox = face.bbox.astype(int)
+                        x1, y1, x2, y2 = bbox
+
+                        # Calculate quality metrics
+                        face_area = (x2 - x1) * (y2 - y1)
+                        frame_area = frame.shape[0] * frame.shape[1]
+                        size_ratio = face_area / frame_area
+
+                        size_quality = min(1.0, max(0.0, (size_ratio - 0.05) / 0.35))
+                        detection_score = float(face.det_score) if hasattr(face, 'det_score') else 0.9
+                        quality_score = (size_quality * 0.5 + detection_score * 0.5)
+
+                        # Color based on quality
+                        if quality_score > 0.7:
+                            color = (0, 255, 0)  # Green - Good
+                            quality_text = "GOOD"
+                        elif quality_score > 0.5:
+                            color = (0, 165, 255)  # Orange - OK
+                            quality_text = "OK"
+                        else:
+                            color = (0, 0, 255)  # Red - Poor
+                            quality_text = "POOR"
+
+                        # Draw rectangle
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+
+                        # Draw quality label
+                        label = f"{quality_text} ({quality_score:.2f})"
+                        cv2.rectangle(frame, (x1, y1 - 35), (x2, y1), color, cv2.FILLED)
+                        cv2.putText(frame, label, (x1 + 6, y1 - 6),
+                                   cv2.FONT_HERSHEY_DUPLEX, 0.6, (255, 255, 255), 1)
+
+                    # Add instructions
+                    instruction_text = "Position your face in the frame"
+                    cv2.putText(frame, instruction_text, (10, frame.shape[0] - 20),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+
+                    # Add face count
+                    face_count_text = f"Faces detected: {len(faces)}"
+                    cv2.putText(frame, face_count_text, (10, 30),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+
+                    # Encode frame as JPEG
+                    encode_params = [cv2.IMWRITE_JPEG_QUALITY, 85]
+                    ret, buffer = cv2.imencode('.jpg', frame, encode_params)
+
+                    if not ret:
+                        print("[WARNING] Failed to encode frame")
+                        consecutive_errors += 1
+                        if consecutive_errors >= max_consecutive_errors:
+                            print("[ERROR] Too many encoding failures, stopping stream")
+                            break
+                        continue
+
+                    frame_bytes = buffer.tobytes()
+
+                    # Reset error counter on success
+                    consecutive_errors = 0
+
+                    # Yield frame in multipart format
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
+                    # Control frame rate
+                    time.sleep(0.033)  # ~30 FPS
+
+                except GeneratorExit:
+                    print("[INFO] Client disconnected from enrollment preview")
+                    self.stop_enrollment_stream()
+                    break
+                except Exception as e:
+                    print(f"[ERROR] Frame generation error: {e}")
+                    consecutive_errors += 1
+                    if consecutive_errors >= max_consecutive_errors:
+                        print("[ERROR] Too many consecutive errors, stopping stream")
+                        self.stop_enrollment_stream()
+                        break
+                    time.sleep(0.1)
+                    continue
+
+        finally:
+            print("[INFO] Enrollment preview stream ended, cleaning up...")
+            self.stop_enrollment_stream()
+            self.stop_camera()
 
     def cleanup(self):
         """Cleanup resources"""
