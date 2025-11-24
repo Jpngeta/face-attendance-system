@@ -7,17 +7,16 @@ from datetime import datetime, timedelta
 from models import db, Student, AttendanceSession, AttendanceRecord
 from database import DatabaseManager
 import traceback
+import os
 
 api_bp = Blueprint('api', __name__)
 
 # Global reference to recognition service (initialized when streaming starts)
 recognition_service = None
 
-# ============================================================================
 # Student Management Endpoints
-# ============================================================================
 
-@api_bp.route('/students', methods=['GET'])
+@api_bp.route('/students', methods=['GET']) 
 def get_students():
     """Get all students"""
     try:
@@ -140,9 +139,9 @@ def delete_student(student_id):
             'error': str(e)
         }), 500
 
-# ============================================================================
+
 # Attendance Session Endpoints
-# ============================================================================
+
 
 @api_bp.route('/sessions', methods=['GET'])
 def get_sessions():
@@ -257,9 +256,9 @@ def end_session(session_id):
             'error': str(e)
         }), 500
 
-# ============================================================================
+
 # Attendance Record Endpoints
-# ============================================================================
+
 
 @api_bp.route('/attendance', methods=['GET'])
 def get_attendance():
@@ -372,9 +371,9 @@ def get_attendance_stats():
             'error': str(e)
         }), 500
 
-# ============================================================================
+
 # System Status Endpoints
-# ============================================================================
+
 
 @api_bp.route('/status', methods=['GET'])
 def system_status():
@@ -409,9 +408,9 @@ def health_check():
         'timestamp': datetime.utcnow().isoformat()
     }), 200
 
-# ============================================================================
+
 # Live Recognition & Video Streaming Endpoints
-# ============================================================================
+
 
 @api_bp.route('/recognition/stream', methods=['GET'])
 def video_stream():
@@ -495,6 +494,290 @@ def reload_encodings():
             'success': True,
             'message': 'Face encodings reloaded',
             'count': len(recognition_service.known_names)
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@api_bp.route('/recognition/stop', methods=['POST'])
+def stop_recognition_stream():
+    """Stop the recognition video stream"""
+    global recognition_service
+
+    try:
+        print("[API] /recognition/stop endpoint called")
+
+        if recognition_service is None:
+            print("[API] Recognition service not initialized")
+            return jsonify({
+                'success': False,
+                'error': 'Recognition service not initialized'
+            }), 400
+
+        print("[API] Calling recognition_service.stop_recognition_stream()")
+        recognition_service.stop_recognition_stream()
+        print("[API] Stream stop signal sent successfully")
+
+        return jsonify({
+            'success': True,
+            'message': 'Recognition stream stopped'
+        }), 200
+    except Exception as e:
+        print(f"[API] Error in stop endpoint: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+# Enrollment Endpoints
+
+@api_bp.route('/enrollment/start', methods=['POST'])
+def start_enrollment():
+    """
+    Start enrollment session for a student
+    Validates student info but doesn't create record yet (waits for photos)
+    """
+    global recognition_service
+
+    try:
+        data = request.get_json()
+
+        # Validate required fields
+        if not data.get('student_id') or not data.get('name'):
+            return jsonify({
+                'success': False,
+                'error': 'student_id and name are required'
+            }), 400
+
+        # Check if student already exists
+        existing = DatabaseManager.get_student_by_id(data['student_id'])
+        if existing:
+            return jsonify({
+                'success': False,
+                'error': 'Student with this ID already exists'
+            }), 400
+
+        # Initialize recognition service if needed
+        if recognition_service is None:
+            from recognition_service import FaceRecognitionService
+            recognition_service = FaceRecognitionService(flask_app=current_app._get_current_object())
+
+        # Return success without creating student yet
+        # Student will be created when first photo is captured
+        return jsonify({
+            'success': True,
+            'message': 'Validation passed, ready for photo capture',
+            'student_data': data  # Return the data for frontend to store temporarily
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@api_bp.route('/enrollment/capture', methods=['POST'])
+def capture_enrollment_photo():
+    """
+    Capture a single photo for enrollment
+    Creates student record on first photo capture
+    """
+    global recognition_service
+
+    try:
+        data = request.get_json()
+
+        if not data.get('student_id'):
+            return jsonify({
+                'success': False,
+                'error': 'student_id is required'
+            }), 400
+
+        # Check if student exists
+        student = DatabaseManager.get_student_by_id(data['student_id'])
+
+        # If student doesn't exist, create them now (first photo capture)
+        if not student:
+            # Student data should be passed from frontend
+            if not data.get('name'):
+                return jsonify({
+                    'success': False,
+                    'error': 'Student data required for first photo capture'
+                }), 400
+
+            print(f"[INFO] Creating student record on first photo: {data['student_id']}")
+            student = DatabaseManager.create_student(
+                student_id=data['student_id'],
+                name=data['name'],
+                email=data.get('email'),
+                phone=data.get('phone'),
+                program=data.get('program'),
+                year_of_study=data.get('year_of_study')
+            )
+
+            if not student:
+                return jsonify({
+                    'success': False,
+                    'error': 'Failed to create student record'
+                }), 500
+
+        # Initialize recognition service if needed
+        if recognition_service is None:
+            from recognition_service import FaceRecognitionService
+            recognition_service = FaceRecognitionService(flask_app=current_app._get_current_object())
+
+        # Create enrollment directory if needed
+        enrollment_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'enrollments', student.student_id)
+        os.makedirs(enrollment_dir, exist_ok=True)
+
+        # Generate filename
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        filename = f"{student.student_id}_{timestamp}.jpg"
+        filepath = os.path.join(enrollment_dir, filename)
+
+        # Capture photo and get embedding
+        success, embedding, quality_score = recognition_service.capture_enrollment_photo_with_quality(
+            person_name=student.name,
+            save_path=filepath
+        )
+
+        if not success:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to capture photo or detect face'
+            }), 400
+
+        # Save embedding to database
+        # Pass student.student_id (the string ID like "STU001")
+        face_encoding = DatabaseManager.add_face_encoding(
+            student_id=student.student_id,  # Pass string student ID
+            encoding=embedding,
+            quality_score=quality_score,
+            image_path=filepath
+        )
+
+        if not face_encoding:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to save face encoding to database'
+            }), 500
+
+        return jsonify({
+            'success': True,
+            'message': 'Photo captured successfully',
+            'encoding_id': face_encoding.id,
+            'quality_score': quality_score,
+            'image_path': filepath,
+            'total_encodings': len(student.face_encodings)
+        }), 201
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@api_bp.route('/enrollment/complete', methods=['POST'])
+def complete_enrollment():
+    """
+    Complete enrollment process
+    Validates that sufficient photos have been captured and reloads encodings
+    """
+    global recognition_service
+
+    try:
+        data = request.get_json()
+
+        if not data.get('student_id'):
+            return jsonify({
+                'success': False,
+                'error': 'student_id is required'
+            }), 400
+
+        # Get student
+        student = DatabaseManager.get_student_by_id(data['student_id'])
+        if not student:
+            return jsonify({
+                'success': False,
+                'error': 'Student not found'
+            }), 404
+
+        # Check if sufficient encodings
+        encoding_count = len(student.face_encodings)
+        if encoding_count < 3:
+            return jsonify({
+                'success': False,
+                'error': f'Insufficient photos. Please capture at least 3 photos (current: {encoding_count})'
+            }), 400
+
+        # Reload encodings into recognition service
+        if recognition_service:
+            recognition_service.load_encodings_from_db()
+
+        return jsonify({
+            'success': True,
+            'message': f'Enrollment complete! {encoding_count} photos captured.',
+            'student': student.to_dict(),
+            'encoding_count': encoding_count
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@api_bp.route('/enrollment/preview', methods=['GET'])
+def enrollment_preview_stream():
+    """
+    Video preview stream for enrollment
+    Shows live camera feed with face detection overlay
+    """
+    global recognition_service
+
+    try:
+        # Initialize recognition service if needed
+        if recognition_service is None:
+            from recognition_service import FaceRecognitionService
+            recognition_service = FaceRecognitionService(flask_app=current_app._get_current_object())
+
+        # Get Flask app for context
+        app = current_app._get_current_object()
+
+        def generate_preview():
+            with app.app_context():
+                yield from recognition_service.generate_enrollment_preview()
+
+        return Response(
+            generate_preview(),
+            mimetype='multipart/x-mixed-replace; boundary=frame'
+        )
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Failed to start preview stream: {str(e)}'
+        }), 500
+
+@api_bp.route('/enrollment/stop', methods=['POST'])
+def stop_enrollment_stream():
+    """Stop the enrollment preview stream"""
+    global recognition_service
+
+    try:
+        if recognition_service is None:
+            return jsonify({
+                'success': False,
+                'error': 'Recognition service not initialized'
+            }), 400
+
+        recognition_service.stop_enrollment_stream()
+
+        return jsonify({
+            'success': True,
+            'message': 'Enrollment preview stream stopped'
         }), 200
     except Exception as e:
         return jsonify({
