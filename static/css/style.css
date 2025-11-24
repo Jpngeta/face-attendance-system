@@ -632,3 +632,11 @@ main {
 .pulse {
     animation: pulse 2s ease-in-out infinite;
 }
+
+/* Force black text on light buttons inside cards */
+.card .btn-light,
+.card .btn-light *,       /* Targets everything inside the button */
+.card .btn-light i,       /* Explicitly targets the icon */
+.card .btn-light span {   /* Explicitly targets the text */
+    color: #000000 !important;
+}
