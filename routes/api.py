@@ -4,7 +4,7 @@ RESTful API endpoints for the application
 """
 from flask import Blueprint, request, jsonify, current_app, Response
 from datetime import datetime, timedelta
-from models import db, Student, AttendanceSession, AttendanceRecord
+from models import db, Student, AttendanceSession, AttendanceRecord, SystemConfig
 from database import DatabaseManager
 from google_sheets_service import create_and_export_attendance_report, create_excel_only_report
 from email_service import send_attendance_report_email
@@ -967,6 +967,78 @@ def stop_enrollment_stream():
         return jsonify({
             'success': True,
             'message': 'Enrollment preview stream stopped'
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+# Settings/Configuration Endpoints
+
+@api_bp.route('/settings', methods=['GET'])
+def get_settings():
+    """Get all system settings"""
+    try:
+        configs = DatabaseManager.get_all_configs()
+        settings = {config.key: config.value for config in configs}
+
+        # Provide defaults if not set
+        if 'late_threshold_minutes' not in settings:
+            settings['late_threshold_minutes'] = '30'
+
+        return jsonify({
+            'success': True,
+            'settings': settings
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@api_bp.route('/settings', methods=['POST'])
+def update_settings():
+    """Update system settings"""
+    try:
+        data = request.get_json()
+
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'No settings provided'
+            }), 400
+
+        # Update each setting
+        for key, value in data.items():
+            # Validate late_threshold_minutes
+            if key == 'late_threshold_minutes':
+                try:
+                    threshold = int(value)
+                    if threshold < 0:
+                        return jsonify({
+                            'success': False,
+                            'error': 'Late threshold must be a positive number'
+                        }), 400
+                except ValueError:
+                    return jsonify({
+                        'success': False,
+                        'error': 'Late threshold must be a valid number'
+                    }), 400
+
+                DatabaseManager.set_config(
+                    'late_threshold_minutes',
+                    str(threshold),
+                    'Minutes after session start to mark attendance as late'
+                )
+            else:
+                # Store other settings as-is
+                DatabaseManager.set_config(key, str(value))
+
+        return jsonify({
+            'success': True,
+            'message': 'Settings updated successfully'
         }), 200
     except Exception as e:
         return jsonify({
