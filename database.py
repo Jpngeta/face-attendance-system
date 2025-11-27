@@ -123,6 +123,7 @@ class DatabaseManager:
     def create_attendance_session(session_name: str, course_code: Optional[str] = None,
                                  course_name: Optional[str] = None,
                                  instructor_name: Optional[str] = None,
+                                 instructor_email: Optional[str] = None,
                                  location: Optional[str] = None) -> AttendanceSession:
         """Create a new attendance session"""
         session = AttendanceSession(
@@ -130,6 +131,7 @@ class DatabaseManager:
             course_code=course_code,
             course_name=course_name,
             instructor_name=instructor_name,
+            instructor_email=instructor_email,
             location=location
         )
         db.session.add(session)
