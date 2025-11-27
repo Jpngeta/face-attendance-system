@@ -5,7 +5,7 @@ import numpy as np
 import pickle
 from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
-from models import db, Student, FaceEncoding, AttendanceSession, AttendanceRecord, SyncQueue
+from models import db, Student, FaceEncoding, AttendanceSession, AttendanceRecord, SyncQueue, SystemConfig
 
 class DatabaseManager:
     """Database manager for handling common database operations"""
@@ -189,6 +189,25 @@ class DatabaseManager:
         if recent_record:
             return None  # Already marked recently
 
+        # Automatically determine late status if not explicitly set
+        if status == 'present':
+            session = AttendanceSession.query.get(session_id)
+            if session and session.start_time:
+                # Get late threshold from config (default 30 minutes)
+                late_threshold_str = DatabaseManager.get_config('late_threshold_minutes', '30')
+                try:
+                    late_threshold_minutes = int(late_threshold_str)
+                except ValueError:
+                    late_threshold_minutes = 30
+
+                # Calculate time difference
+                time_since_start = datetime.utcnow() - session.start_time
+                minutes_since_start = time_since_start.total_seconds() / 60
+
+                # Mark as late if beyond threshold
+                if minutes_since_start > late_threshold_minutes:
+                    status = 'late'
+
         # Create new attendance record
         record = AttendanceRecord(
             session_id=session_id,
@@ -300,3 +319,33 @@ class DatabaseManager:
             'late': late,
             'absent': max(0, Student.query.filter_by(status='active').count() - total) if session_id else 0
         }
+
+    @staticmethod
+    def get_config(key: str, default: Optional[str] = None) -> Optional[str]:
+        """Get system configuration value by key"""
+        config = SystemConfig.query.filter_by(key=key).first()
+        return config.value if config else default
+
+    @staticmethod
+    def set_config(key: str, value: str, description: Optional[str] = None) -> SystemConfig:
+        """Set system configuration value"""
+        config = SystemConfig.query.filter_by(key=key).first()
+        if config:
+            config.value = value
+            if description:
+                config.description = description
+            config.updated_at = datetime.utcnow()
+        else:
+            config = SystemConfig(
+                key=key,
+                value=value,
+                description=description
+            )
+            db.session.add(config)
+        db.session.commit()
+        return config
+
+    @staticmethod
+    def get_all_configs() -> List[SystemConfig]:
+        """Get all system configurations"""
+        return SystemConfig.query.all()
