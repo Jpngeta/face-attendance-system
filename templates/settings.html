@@ -1,11 +1,152 @@
 {% extends "base.html" %}
 {% block title %}Settings{% endblock %}
 {% block content %}
-<h1><i class="bi bi-gear"></i> Settings</h1>
-<div class="card mt-4">
-    <div class="card-body">
-        <h5>System Configuration</h5>
-        <p>Settings page coming soon. Configure recognition thresholds, camera settings, and Google Sheets integration here.</p>
+<div class="row mb-4">
+    <div class="col">
+        <h1><i class="bi bi-gear"></i> Settings</h1>
     </div>
 </div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-clock-history"></i> Attendance Settings</h5>
+            </div>
+            <div class="card-body">
+                <form id="settingsForm">
+                    <div class="mb-4">
+                        <label for="lateThreshold" class="form-label">
+                            <strong>Late Arrival Threshold</strong>
+                        </label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="lateThreshold"
+                                   min="0" step="1" value="30" required>
+                        </div>
+                        <div class="form-text">
+                            Students who arrive this many minutes after the session start time will be marked as "Late" instead of "Present".
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-save"></i> Save Settings
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="loadSettings()">
+                            <i class="bi bi-arrow-clockwise"></i> Reset
+                        </button>
+                    </div>
+                </form>
+
+                <div id="saveStatus" class="mt-3" style="display: none;"></div>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> Additional Settings</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">More configuration options coming soon:</p>
+                <ul class="text-muted">
+                    <li>Recognition confidence thresholds</li>
+                    <li>Camera settings</li>
+                    <li>Google Sheets integration</li>
+                    <li>Email notification preferences</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="bi bi-check-circle"></i> Status Indicators</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <span class="badge bg-success fs-6">Present</span>
+                    <p class="small mt-1 mb-0">Arrived within the threshold time</p>
+                </div>
+                <div class="mb-3">
+                    <span class="badge bg-warning fs-6">Late</span>
+                    <p class="small mt-1 mb-0">Arrived after the threshold time</p>
+                </div>
+                <div>
+                    <span class="badge bg-secondary fs-6">Excused</span>
+                    <p class="small mt-1 mb-0">Manually marked as excused</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Load settings on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadSettings();
+});
+
+function loadSettings() {
+    fetch('/api/settings')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('lateThreshold').value = data.settings.late_threshold_minutes || '30';
+            } else {
+                showStatus('Error loading settings: ' + data.error, 'danger');
+            }
+        })
+        .catch(error => {
+            showStatus('Error loading settings: ' + error.message, 'danger');
+        });
+}
+
+// Handle form submission
+document.getElementById('settingsForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const lateThreshold = document.getElementById('lateThreshold').value;
+
+    // Validate
+    if (!lateThreshold || lateThreshold < 0) {
+        showStatus('Please enter a valid threshold (0 or greater)', 'danger');
+        return;
+    }
+
+    // Save settings
+    fetch('/api/settings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            late_threshold_minutes: lateThreshold
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showStatus('Settings saved successfully!', 'success');
+        } else {
+            showStatus('Error saving settings: ' + data.error, 'danger');
+        }
+    })
+    .catch(error => {
+        showStatus('Error saving settings: ' + error.message, 'danger');
+    });
+});
+
+function showStatus(message, type) {
+    const statusDiv = document.getElementById('saveStatus');
+    statusDiv.className = `alert alert-${type}`;
+    statusDiv.textContent = message;
+    statusDiv.style.display = 'block';
+
+    // Hide after 5 seconds
+    setTimeout(() => {
+        statusDiv.style.display = 'none';
+    }, 5000);
+}
+</script>
 {% endblock %}

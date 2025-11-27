@@ -5,15 +5,33 @@
 <div class="card mt-4">
     <div class="card-body">
         {% if records %}
-        <table class="table table-striped">
-            <thead><tr><th>Session</th><th>Student</th><th>Timestamp</th><th>Status</th><th>Confidence</th></tr></thead>
+        <table class="table table-striped table-hover">
+            <thead class="table-light">
+                <tr>
+                    <th>Session</th>
+                    <th>Student</th>
+                    <th>Timestamp</th>
+                    <th>Status</th>
+                    <th>Confidence</th>
+                </tr>
+            </thead>
             <tbody>
                 {% for record in records %}
                 <tr>
                     <td>{{ record.session.session_name }}</td>
                     <td>{{ record.student.name }} ({{ record.student.student_id }})</td>
                     <td>{{ record.timestamp | local_time }}</td>
-                    <td><span class="badge bg-success">{{ record.status }}</span></td>
+                    <td>
+                        {% if record.status == 'present' %}
+                            <span class="badge bg-success">Present</span>
+                        {% elif record.status == 'late' %}
+                            <span class="badge bg-warning text-dark">Late</span>
+                        {% elif record.status == 'excused' %}
+                            <span class="badge bg-secondary">Excused</span>
+                        {% else %}
+                            <span class="badge bg-info">{{ record.status }}</span>
+                        {% endif %}
+                    </td>
                     <td>{{ "%.2f"|format(record.confidence_score) }}</td>
                 </tr>
                 {% endfor %}
