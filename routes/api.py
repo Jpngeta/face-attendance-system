@@ -6,6 +6,8 @@ from flask import Blueprint, request, jsonify, current_app, Response
 from datetime import datetime, timedelta
 from models import db, Student, AttendanceSession, AttendanceRecord
 from database import DatabaseManager
+from google_sheets_service import create_and_export_attendance_report, create_excel_only_report
+from email_service import send_attendance_report_email
 import traceback
 import os
 
@@ -220,6 +222,7 @@ def create_session():
             course_code=data.get('course_code'),
             course_name=data.get('course_name'),
             instructor_name=data.get('instructor_name'),
+            instructor_email=data.get('instructor_email'),
             location=data.get('location')
         )
 
@@ -245,12 +248,198 @@ def end_session(session_id):
                 'error': 'Session not found'
             }), 404
 
-        return jsonify({
+        # Prepare response data
+        response_data = {
             'success': True,
             'message': 'Session ended successfully',
             'session': session.to_dict()
-        }), 200
+        }
+
+        # Attempt to send report if instructor email is provided
+        if session.instructor_email:
+            try:
+                print(f"[INFO] Generating attendance report for session {session_id}")
+
+                # Get attendance records for this session
+                attendance_records = DatabaseManager.get_session_attendance(session_id)
+
+                if not attendance_records:
+                    print(f"[WARNING] No attendance records found for session {session_id}")
+                    response_data['report_warning'] = 'No attendance records to send'
+                else:
+                    # Prepare session data
+                    session_dict = session.to_dict()
+
+                    # Prepare attendance records with student details
+                    records_data = []
+                    for record in attendance_records:
+                        record_dict = record.to_dict()
+                        if record.student:
+                            record_dict['student_email'] = record.student.email
+                            record_dict['student_program'] = record.student.program
+                        records_data.append(record_dict)
+
+                    # Create attendance report (tries Google Sheets, falls back to Excel-only)
+                    print(f"[INFO] Creating attendance report for session {session_id}")
+                    try:
+                        report_result = create_and_export_attendance_report(
+                            session_data=session_dict,
+                            attendance_records=records_data,
+                            output_dir='/tmp'
+                        )
+                        print(f"[INFO] Google Sheets report created successfully")
+                    except Exception:
+                        # Google Sheets failed (likely permission/quota issues), use Excel-only fallback
+                        print(f"[INFO] Using Excel-only export (Google Sheets unavailable)")
+                        report_result = create_excel_only_report(
+                            session_data=session_dict,
+                            attendance_records=records_data,
+                            output_dir='/tmp'
+                        )
+
+                    # Send email with attachment
+                    print(f"[INFO] Sending email to {session.instructor_email}")
+                    email_sent = send_attendance_report_email(
+                        recipient_email=session.instructor_email,
+                        session_data=session_dict,
+                        excel_path=report_result['excel_path'],
+                        spreadsheet_url=report_result.get('spreadsheet_url')
+                    )
+
+                    if email_sent:
+                        response_data['report_sent'] = True
+                        response_data['report_info'] = {
+                            'spreadsheet_url': report_result.get('spreadsheet_url'),
+                            'recipient': session.instructor_email
+                        }
+                        print(f"[INFO] Report sent successfully to {session.instructor_email}")
+                    else:
+                        response_data['report_sent'] = False
+                        response_data['report_error'] = 'Failed to send email'
+                        print(f"[ERROR] Failed to send email to {session.instructor_email}")
+
+                    # Clean up temporary Excel file
+                    try:
+                        if os.path.exists(report_result['excel_path']):
+                            os.remove(report_result['excel_path'])
+                            print(f"[INFO] Cleaned up temporary file: {report_result['excel_path']}")
+                    except Exception as cleanup_error:
+                        print(f"[WARNING] Failed to clean up temporary file: {cleanup_error}")
+
+            except Exception as report_error:
+                print(f"[ERROR] Failed to generate/send report: {report_error}")
+                traceback.print_exc()
+                response_data['report_sent'] = False
+                response_data['report_error'] = str(report_error)
+        else:
+            print(f"[INFO] No instructor email provided for session {session_id}")
+            response_data['report_sent'] = False
+            response_data['report_info'] = 'No instructor email provided'
+
+        return jsonify(response_data), 200
+
     except Exception as e:
+        print(f"[ERROR] Failed to end session: {e}")
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@api_bp.route('/sessions/<int:session_id>/resend-report', methods=['POST'])
+def resend_report(session_id):
+    """Manually resend attendance report for a completed session"""
+    try:
+        # Get the session
+        session = DatabaseManager.get_session_by_id(session_id)
+        if not session:
+            return jsonify({
+                'success': False,
+                'error': 'Session not found'
+            }), 404
+
+        # Check if instructor email is provided
+        if not session.instructor_email:
+            return jsonify({
+                'success': False,
+                'error': 'No instructor email configured for this session'
+            }), 400
+
+        # Get attendance records
+        attendance_records = DatabaseManager.get_session_attendance(session_id)
+
+        if not attendance_records:
+            return jsonify({
+                'success': False,
+                'error': 'No attendance records found for this session'
+            }), 400
+
+        # Prepare session data
+        session_dict = session.to_dict()
+
+        # Prepare attendance records with student details
+        records_data = []
+        for record in attendance_records:
+            record_dict = record.to_dict()
+            if record.student:
+                record_dict['student_email'] = record.student.email
+                record_dict['student_program'] = record.student.program
+            records_data.append(record_dict)
+
+        # Create attendance report (tries Google Sheets, falls back to Excel-only)
+        print(f"[INFO] Creating attendance report for session {session_id} (manual resend)")
+        try:
+            report_result = create_and_export_attendance_report(
+                session_data=session_dict,
+                attendance_records=records_data,
+                output_dir='/tmp'
+            )
+            print(f"[INFO] Google Sheets report created successfully")
+        except Exception:
+            # Google Sheets failed (likely permission/quota issues), use Excel-only fallback
+            print(f"[INFO] Using Excel-only export (Google Sheets unavailable)")
+            report_result = create_excel_only_report(
+                session_data=session_dict,
+                attendance_records=records_data,
+                output_dir='/tmp'
+            )
+
+        # Send email with attachment
+        print(f"[INFO] Sending email to {session.instructor_email} (manual resend)")
+        email_sent = send_attendance_report_email(
+            recipient_email=session.instructor_email,
+            session_data=session_dict,
+            excel_path=report_result['excel_path'],
+            spreadsheet_url=report_result.get('spreadsheet_url')
+        )
+
+        # Clean up temporary Excel file
+        try:
+            if os.path.exists(report_result['excel_path']):
+                os.remove(report_result['excel_path'])
+                print(f"[INFO] Cleaned up temporary file: {report_result['excel_path']}")
+        except Exception as cleanup_error:
+            print(f"[WARNING] Failed to clean up temporary file: {cleanup_error}")
+
+        if email_sent:
+            return jsonify({
+                'success': True,
+                'message': 'Report sent successfully',
+                'report_info': {
+                    'spreadsheet_url': report_result.get('spreadsheet_url'),
+                    'recipient': session.instructor_email,
+                    'attendance_count': len(attendance_records)
+                }
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to send email. Check server logs for details.'
+            }), 500
+
+    except Exception as e:
+        print(f"[ERROR] Failed to resend report: {e}")
+        traceback.print_exc()
         return jsonify({
             'success': False,
             'error': str(e)
