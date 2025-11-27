@@ -172,6 +172,10 @@
                         <input type="text" class="form-control" id="instructorName">
                     </div>
                     <div class="mb-3">
+                        <label for="instructorEmail" class="form-label">Instructor Email</label>
+                        <input type="email" class="form-control" id="instructorEmail" placeholder="For receiving attendance reports">
+                    </div>
+                    <div class="mb-3">
                         <label for="location" class="form-label">Location</label>
                         <input type="text" class="form-control" id="location">
                     </div>
@@ -194,6 +198,7 @@ function createSession() {
         course_code: document.getElementById('courseCode').value,
         course_name: document.getElementById('courseName').value,
         instructor_name: document.getElementById('instructorName').value,
+        instructor_email: document.getElementById('instructorEmail').value,
         location: document.getElementById('location').value
     };
 
@@ -215,16 +220,93 @@ function createSession() {
 
 function endSession(sessionId) {
     if (confirm('Are you sure you want to end this session?')) {
+        // Show loading message
+        showStatusModal('Ending Session', 'Please wait while we end the session and send the attendance report to the lecturer...', 'info', false);
+
         fetch(`/api/sessions/${sessionId}/end`, {method: 'POST'})
         .then(response => response.json())
         .then(result => {
             if (result.success) {
-                location.reload();
+                // Check if report was sent
+                if (result.report_sent === true) {
+                    showStatusModal(
+                        'Session Ended Successfully',
+                        `The session has been ended and the attendance report has been successfully sent to ${result.report_info.recipient}.` +
+                        (result.report_info.spreadsheet_url ? `<br><br><a href="${result.report_info.spreadsheet_url}" target="_blank" class="btn btn-sm btn-primary mt-2">View Google Sheet</a>` : ''),
+                        'success',
+                        true
+                    );
+                } else if (result.report_sent === false) {
+                    // Report failed to send
+                    let message = 'The session has been ended, but there was an issue sending the attendance report.';
+                    if (result.report_error) {
+                        message += `<br><br>Error: ${result.report_error}`;
+                    } else if (result.report_info) {
+                        message += `<br><br>Reason: ${result.report_info}`;
+                    } else if (result.report_warning) {
+                        message += `<br><br>${result.report_warning}`;
+                    }
+                    showStatusModal('Session Ended (Report Warning)', message, 'warning', true);
+                } else {
+                    // Session ended without email attempt
+                    showStatusModal('Session Ended', 'The session has been ended successfully.', 'success', true);
+                }
             } else {
-                alert('Error: ' + result.error);
+                showStatusModal('Error', 'Failed to end session: ' + result.error, 'danger', true);
             }
+        })
+        .catch(error => {
+            showStatusModal('Error', 'An error occurred: ' + error, 'danger', true);
         });
     }
+}
+
+// Function to show status modal
+function showStatusModal(title, message, type, allowClose) {
+    // Remove existing modal if present
+    const existingModal = document.getElementById('statusModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
+    // Icon based on type
+    const icons = {
+        'info': 'bi-info-circle-fill',
+        'success': 'bi-check-circle-fill',
+        'warning': 'bi-exclamation-triangle-fill',
+        'danger': 'bi-x-circle-fill'
+    };
+
+    // Create modal HTML
+    const modalHTML = `
+        <div class="modal fade" id="statusModal" tabindex="-1" data-bs-backdrop="${allowClose ? 'true' : 'static'}" data-bs-keyboard="${allowClose}">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header bg-${type} text-white">
+                        <h5 class="modal-title">
+                            <i class="bi ${icons[type]}"></i> ${title}
+                        </h5>
+                        ${allowClose ? '<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>' : ''}
+                    </div>
+                    <div class="modal-body">
+                        ${message}
+                    </div>
+                    ${allowClose ? `
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-primary" data-bs-dismiss="modal" onclick="location.reload()">OK</button>
+                    </div>
+                    ` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Add modal to page
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('statusModal'));
+    modal.show();
 }
 
 // Auto-open modal if openModal parameter is present

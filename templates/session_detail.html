@@ -6,8 +6,19 @@
     <div class="card-body">
         <p><strong>Course:</strong> {{ session.course_code or 'N/A' }} - {{ session.course_name or 'N/A' }}</p>
         <p><strong>Instructor:</strong> {{ session.instructor_name or 'N/A' }}</p>
+        {% if session.instructor_email %}
+        <p><strong>Instructor Email:</strong> {{ session.instructor_email }}</p>
+        {% endif %}
         <p><strong>Location:</strong> {{ session.location or 'N/A' }}</p>
         <p><strong>Status:</strong> <span class="badge bg-{{ 'warning' if session.status == 'active' else 'success' }}">{{ session.status }}</span></p>
+
+        {% if session.instructor_email and records|length > 0 %}
+        <div class="mt-3">
+            <button class="btn btn-primary" onclick="resendReport({{ session.id }})" id="resendBtn">
+                <i class="bi bi-envelope"></i> Resend Attendance Report
+            </button>
+        </div>
+        {% endif %}
         <h5 class="mt-4">Statistics</h5>
         <p>Total: {{ stats.total }}, Present: {{ stats.present }}, Late: {{ stats.late }}</p>
         <h5 class="mt-4">Attendance Records</h5>
@@ -27,4 +38,83 @@
         </table>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function resendReport(sessionId) {
+    // Show loading modal
+    showStatusModal('Sending Report', 'Please wait while we send the attendance report to the lecturer...', 'info', false);
+
+    fetch(`/api/sessions/${sessionId}/resend-report`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showStatusModal(
+                'Report Sent Successfully',
+                `The attendance report has been successfully sent to ${data.report_info.recipient}.` +
+                (data.report_info.spreadsheet_url ? `<br><br><a href="${data.report_info.spreadsheet_url}" target="_blank" class="btn btn-sm btn-primary mt-2">View Google Sheet</a>` : ''),
+                'success',
+                true
+            );
+        } else {
+            showStatusModal('Error', 'Failed to send report: ' + data.error, 'danger', true);
+        }
+    })
+    .catch(error => {
+        showStatusModal('Error', 'An error occurred: ' + error.message, 'danger', true);
+    });
+}
+
+// Function to show status modal
+function showStatusModal(title, message, type, allowClose) {
+    // Remove existing modal if present
+    const existingModal = document.getElementById('statusModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
+    // Icon based on type
+    const icons = {
+        'info': 'bi-info-circle-fill',
+        'success': 'bi-check-circle-fill',
+        'warning': 'bi-exclamation-triangle-fill',
+        'danger': 'bi-x-circle-fill'
+    };
+
+    // Create modal HTML
+    const modalHTML = `
+        <div class="modal fade" id="statusModal" tabindex="-1" data-bs-backdrop="${allowClose ? 'true' : 'static'}" data-bs-keyboard="${allowClose}">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header bg-${type} text-white">
+                        <h5 class="modal-title">
+                            <i class="bi ${icons[type]}"></i> ${title}
+                        </h5>
+                        ${allowClose ? '<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>' : ''}
+                    </div>
+                    <div class="modal-body">
+                        ${message}
+                    </div>
+                    ${allowClose ? `
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+                    </div>
+                    ` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Add modal to page
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('statusModal'));
+    modal.show();
+}
+</script>
 {% endblock %}
