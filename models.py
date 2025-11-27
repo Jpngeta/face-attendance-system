@@ -79,6 +79,7 @@ class AttendanceSession(db.Model):
     course_code = db.Column(db.String(50), nullable=True)
     course_name = db.Column(db.String(200), nullable=True)
     instructor_name = db.Column(db.String(100), nullable=True)
+    instructor_email = db.Column(db.String(120), nullable=True)  # Added for email reports
     location = db.Column(db.String(100), nullable=True)
     start_time = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     end_time = db.Column(db.DateTime, nullable=True)
@@ -105,6 +106,7 @@ class AttendanceSession(db.Model):
             'course_code': self.course_code,
             'course_name': self.course_name,
             'instructor_name': self.instructor_name,
+            'instructor_email': self.instructor_email,
             'location': self.location,
             'start_time': self.start_time.isoformat() if self.start_time else None,
             'end_time': self.end_time.isoformat() if self.end_time else None,
