@@ -41,8 +41,14 @@ attendance.db
 
 # Google Sheets credentials
 credentials.json
+google-credentials.json
 token.json
 *.json.secret
+
+# Excel exports
+*.xlsx
+*.xls
+Attendance_*.xlsx
 
 # IDE
 .vscode/
