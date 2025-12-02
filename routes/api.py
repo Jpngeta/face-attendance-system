@@ -35,7 +35,7 @@ def get_students():
             'error': str(e)
         }), 500
 
-@api_bp.route('/students/<student_id>', methods=['GET'])
+@api_bp.route('/students/<path:student_id>', methods=['GET'])
 def get_student(student_id):
     """Get a specific student"""
     try:
@@ -76,6 +76,15 @@ def create_student():
                 'error': 'Student with this ID already exists'
             }), 400
 
+        # Check if email is already in use
+        if data.get('email'):
+            existing_email = Student.query.filter_by(email=data['email']).first()
+            if existing_email:
+                return jsonify({
+                    'success': False,
+                    'error': f'Email {data["email"]} is already in use by another student'
+                }), 400
+
         student = DatabaseManager.create_student(
             student_id=data['student_id'],
             name=data['name'],
@@ -91,16 +100,37 @@ def create_student():
             'student': student.to_dict()
         }), 201
     except Exception as e:
+        # Handle database integrity errors
+        error_msg = str(e)
+        if 'UNIQUE constraint failed: students.email' in error_msg:
+            return jsonify({
+                'success': False,
+                'error': 'This email address is already in use by another student'
+            }), 400
+        elif 'UNIQUE constraint failed: students.student_id' in error_msg:
+            return jsonify({
+                'success': False,
+                'error': 'A student with this ID already exists'
+            }), 400
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': error_msg
         }), 500
 
-@api_bp.route('/students/<student_id>', methods=['PUT'])
+@api_bp.route('/students/<path:student_id>', methods=['PUT'])
 def update_student(student_id):
     """Update student information"""
     try:
         data = request.get_json()
+
+        # Check if email is being updated and if it's already in use by another student
+        if 'email' in data and data['email']:
+            existing_student = Student.query.filter_by(email=data['email']).first()
+            if existing_student and existing_student.student_id != student_id:
+                return jsonify({
+                    'success': False,
+                    'error': f'Email {data["email"]} is already in use by another student'
+                }), 400
 
         student = DatabaseManager.update_student(student_id, **data)
         if not student:
@@ -115,12 +145,19 @@ def update_student(student_id):
             'student': student.to_dict()
         }), 200
     except Exception as e:
+        # Handle database integrity errors
+        error_msg = str(e)
+        if 'UNIQUE constraint failed: students.email' in error_msg:
+            return jsonify({
+                'success': False,
+                'error': 'This email address is already in use by another student'
+            }), 400
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': error_msg
         }), 500
 
-@api_bp.route('/students/<student_id>', methods=['DELETE'])
+@api_bp.route('/students/<path:student_id>', methods=['DELETE'])
 def delete_student(student_id):
     """Delete (deactivate) a student"""
     try:
