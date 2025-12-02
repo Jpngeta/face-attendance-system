@@ -640,3 +640,34 @@ main {
 .card .btn-light span {   /* Explicitly targets the text */
     color: #000000 !important;
 }
+
+/* ========== Student Management Styles ========== */
+.btn-edit-student,
+.btn-delete-student {
+    margin-right: var(--spacing-xs);
+}
+
+.btn-edit-student:last-child,
+.btn-delete-student:last-child {
+    margin-right: 0;
+}
+
+/* Make action buttons in tables more compact */
+.table .btn-sm {
+    padding: 4px 8px;
+    font-size: 11px;
+}
+
+.table .btn-sm i {
+    font-size: 12px;
+}
+
+/* Modal Header with danger background */
+.modal-header.bg-danger {
+    background: var(--accent-red) !important;
+    color: white !important;
+}
+
+.modal-header.bg-danger .modal-title {
+    color: white !important;
+}
