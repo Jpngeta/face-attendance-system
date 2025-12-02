@@ -58,11 +58,12 @@ class DatabaseManager:
 
     @staticmethod
     def delete_student(student_id: str) -> bool:
-        """Delete a student (soft delete by setting status to inactive)"""
+        """Delete a student (hard delete - permanently removes from database)"""
         student = DatabaseManager.get_student_by_id(student_id)
         if student:
-            student.status = 'inactive'
-            student.updated_at = datetime.utcnow()
+            # Hard delete - this will cascade to face_encodings and attendance_records
+            # due to the cascade='all, delete-orphan' relationship defined in models
+            db.session.delete(student)
             db.session.commit()
             return True
         return False
