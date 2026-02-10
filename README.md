@@ -338,11 +338,11 @@ If you have existing pickle-based encodings:
 
 ## License
 
-[Your License Here]
+MIT License
 
 ## Contributors
 
-[Your Name]
+JP Ngeta
 
 ## Acknowledgments
 
